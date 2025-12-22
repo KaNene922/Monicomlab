@@ -1,0 +1,14 @@
+# Large video files
+*.mp4
+moni/monicomlab-testing.mp4
+
+# Log files
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+
+# Database backups
+*.sql.backup
