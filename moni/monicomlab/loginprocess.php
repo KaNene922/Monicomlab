@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         include 'index.php';
     } else {
 
-        $pdo = new PDO($pdoDsn, $username_server, $password_server, $pdoOptions);
+
+        $pdo = new PDO('mysql:host=localhost;dbname=monicomlab', $username_server, $password_server);
         
         // Prepare a SQL statement with placeholders
         $stmt = $pdo->prepare("SELECT * FROM admin WHERE email = :email AND password = :password");
