@@ -1,5 +1,5 @@
 <?php
-include '../../connectMySQL.php';
+include '../../connectMySql.php';
 include '../../loginverification.php';
 if(logged_in()){
 $session_user_id = $_SESSION['user_id'];

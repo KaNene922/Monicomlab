@@ -12,3 +12,5 @@ logs/
 
 # Database backups
 *.sql.backup
+
+*monicomlab.pem
