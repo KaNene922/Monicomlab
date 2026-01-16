@@ -111,6 +111,22 @@ button:hover {
   background-color: #1c3a9d;
 }
 
+.signup-link {
+  margin-top: 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.signup-link a {
+  color: #2E4DBB;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.signup-link a:hover {
+  text-decoration: underline;
+}
+
 </style>
 <body>
   <div class="background">
@@ -131,6 +147,9 @@ button:hover {
         </div>
         <button type="submit">LOGIN</button>
       </form>
+      <div class="signup-link">
+        Don't have an account? <a href="register.php">Create Account</a>
+      </div>
     </div>
   </div>
 </body>
