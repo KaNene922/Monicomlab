@@ -1,6 +1,6 @@
 <?php
-include '../../connectMySQL.php';
-include '../../loginverification.php';
+require_once __DIR__ . '/../../connectMySql.php';
+require_once __DIR__ . '/../../loginverification.php';
 if(logged_in()){
 $session_user_id = $_SESSION['user_id'];
 
