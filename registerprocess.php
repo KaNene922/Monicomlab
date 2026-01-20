@@ -35,8 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Check if email already exists
     if (empty($errors)) {
         try {
-            $pdo = new PDO('mysql:host=localhost;dbname=monicomlab', $username_server, $password_server);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            // Use shared PDO from connectMySql.php
             
             $stmt = $pdo->prepare("SELECT * FROM admin WHERE email = :email");
             $stmt->bindParam(':email', $email);

@@ -18,9 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
            }</script>";
         include 'index.php';
     } else {
-
-
-        $pdo = new PDO('mysql:host=localhost;dbname=monicomlab', $username_server, $password_server);
+        // Use shared PDO from connectMySql.php
+        // (connectMySql.php already configures utf8mb4 + ERRMODE_EXCEPTION)
         
         // Prepare a SQL statement with placeholders
         $stmt = $pdo->prepare("SELECT * FROM admin WHERE email = :email AND password = :password");
@@ -31,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rowCount = $stmt->rowCount();
 
             if ($rowCount > 0) {
-            // Fetch multiple rows using a while loop
+            // Fetch user row
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                
                 $user_id = $row['user_id'];
@@ -45,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['image'] = $image;
                
                 header('location:main/dashboard/');
+                exit;
             }
         }
 

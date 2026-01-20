@@ -6,6 +6,80 @@ set_time_limit(0);
 $maxIterations = 1000; // Maximum monitoring loops
 $sleepDuration = 5;    // Time (seconds) between each loop
 
+function isValidIpAddress($ip) {
+    return is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP);
+}
+
+function buildPingCommandForHost($ip) {
+    // Keep it simple and cross-platform.
+    // Windows: -n count, -w timeout(ms)
+    // Linux:   -c count, -W timeout(seconds)
+    if (defined('PHP_OS_FAMILY') && PHP_OS_FAMILY === 'Windows') {
+        return "ping -n 1 -w 1000 $ip";
+    }
+
+    return "ping -c 1 -W 1 $ip";
+}
+
+function pingHostOnce($ip, &$debug) {
+    $output = [];
+    $status = 0;
+    $cmd = buildPingCommandForHost($ip);
+    exec($cmd, $output, $status);
+    $text = implode("\n", $output);
+
+    $debug['ping_cmd'] = $cmd;
+    $debug['ping_status'] = $status;
+    $debug['ping_output'] = $output;
+
+    if (defined('PHP_OS_FAMILY') && PHP_OS_FAMILY === 'Windows') {
+        // Typical success: "Reply from ..."
+        return ($status === 0) && (stripos($text, 'Reply from') !== false) && (stripos($text, 'unreachable') === false);
+    }
+
+    // Linux success patterns vary; be permissive.
+    return ($status === 0) && ((stripos($text, 'bytes from') !== false) || (preg_match('/\b1\s+received\b/i', $text) === 1));
+}
+
+function checkTcpPorts($ip, $ports, $timeoutSeconds, &$debug) {
+    foreach ($ports as $port) {
+        $errno = 0;
+        $errstr = '';
+        $fp = @fsockopen($ip, (int)$port, $errno, $errstr, $timeoutSeconds);
+        if (is_resource($fp)) {
+            fclose($fp);
+            $debug['tcp_open_port'] = (int)$port;
+            return true;
+        }
+    }
+    return false;
+}
+
+function fetchHttp($url, &$httpCode, &$debug) {
+    if (!function_exists('curl_init')) {
+        $httpCode = 0;
+        $debug['http_error'] = 'cURL not available';
+        return false;
+    }
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    $output = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    $debug['http_code'] = $httpCode;
+    if ($curlErr) {
+        $debug['http_error'] = $curlErr;
+    }
+
+    return $output;
+}
+
 // Function to remove duplicate monitoring data
 function removeDuplicateMonitoringDataAlternative($conn) {
     $deleteQuery = "
@@ -58,36 +132,66 @@ for ($iteration = 1; $iteration <= $maxIterations; $iteration++) {
         echo "<div style='border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;'>";
         echo "<h4>Monitoring: $ip ($deviceType)</h4>";
 
-        // ✅ Clear previous ping results for each device
-        $output = [];
-        $status = 0;
+        if (!isValidIpAddress($ip)) {
+            echo "<p style='color: red; font-weight: bold;'>Invalid IP address: " . htmlspecialchars((string)$ip) . "</p>";
+            echo "</div>";
+            continue;
+        }
 
-        // 🏓 Ping test
-        exec("ping -n 1 $ip", $output, $status);
-        $pingResult = implode("\n", $output);
+        $debug = [];
+        $online = false;
+        $reason = '';
 
-        // ✅ Determine if device is online
-        if (strpos($pingResult, "Reply from") !== false && strpos($pingResult, "unreachable") === false && $status === 0) {
-            echo "<p style='color: green;'>✓ Device is reachable</p>";
+        // 1) ICMP ping (may be blocked by firewall)
+        $pingOk = pingHostOnce($ip, $debug);
+        if ($pingOk) {
+            $online = true;
+            $reason = 'ping';
+        }
+
+        // 2) HTTP probe for PC/SERVER (works even if ICMP is blocked)
+        $httpResponse = false;
+        $httpCode = 0;
+        $url = "http://" . $ip . "/monicomlab/get_percentage.php?ip=" . urlencode($ip);
+        if (!$online && ($deviceType == 'PC' || $deviceType == 'SERVER')) {
+            $httpResponse = fetchHttp($url, $httpCode, $debug);
+            if ($httpResponse !== false && $httpCode > 0 && $httpCode < 500) {
+                $online = true;
+                $reason = 'http';
+            }
+        }
+
+        // 3) TCP port probe fallback (useful when ICMP is blocked and device doesn't host our endpoint)
+        if (!$online) {
+            $ports = [80, 443];
+            if ($deviceType == 'PC') {
+                $ports = [3389, 445, 135, 80, 443];
+            } elseif ($deviceType == 'SERVER') {
+                $ports = [22, 80, 443, 445];
+            }
+
+            if (checkTcpPorts($ip, $ports, 1, $debug)) {
+                $online = true;
+                $reason = 'tcp';
+            }
+        }
+
+        if ($online) {
+            echo "<p style='color: green;'>✓ Device is reachable (<strong>" . htmlspecialchars($reason) . "</strong>)</p>";
 
             if ($deviceType == 'PC' || $deviceType == 'SERVER') {
                 echo "<p>Device is a PC or SERVER - attempting to get remote content</p>";
 
-                if (!function_exists('getRemoteContent')) {
-                    function getRemoteContent($url) {
-                        $ch = curl_init($url);
-                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                        $output = curl_exec($ch);
-                        curl_close($ch);
-                        return $output;
-                    }
+                echo "<p>Request URL: " . htmlspecialchars($url) . "</p>";
+                if ($httpResponse === false) {
+                    $httpResponse = fetchHttp($url, $httpCode, $debug);
                 }
-
-                $url = "http://" . $ip . "/monicomlab/get_percentage.php?ip=" . $ip;
-                echo "<p>Request URL: $url</p>";
-                $response = getRemoteContent($url);
-                echo "<p>Response: " . htmlspecialchars($response) . "</p>";
+                echo "<p>HTTP Code: " . (int)$httpCode . "</p>";
+                if ($httpResponse !== false) {
+                    echo "<p>Response: " . htmlspecialchars((string)$httpResponse) . "</p>";
+                } else {
+                    echo "<p style='color: #b45309;'>⚠ Unable to fetch remote content, but device appears reachable.</p>";
+                }
             } else {
                 $insertSql = "INSERT INTO monitoring_data (ip_address, cpu, ram, disk, status) VALUES (?, 0, 0, 0, 'online')";
                 $stmtInsert = $conn->prepare($insertSql);
@@ -138,7 +242,7 @@ for ($iteration = 1; $iteration <= $maxIterations; $iteration++) {
         echo "<details style='margin-top: 10px;'>";
         echo "<summary>Ping Details</summary>";
         echo "<pre style='background: #eee; padding: 10px;'>";
-        print_r($output);
+        print_r($debug);
         echo "</pre>";
         echo "</details>";
         echo "</div>";

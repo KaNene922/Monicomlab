@@ -2,8 +2,15 @@
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/logs/get_percentage.log');
+
+function log_debug($message) {
+    error_log('[get_percentage] ' . $message);
+}
 
 include 'connectMySql.php';
+log_debug('Request from ' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . ' ip=' . ($_GET['ip'] ?? 'unknown'));
 
 // Create connection using PDO (secure)
 try {
@@ -11,6 +18,7 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     http_response_code(500);
+    log_debug('DB connection failed: ' . $e->getMessage());
     echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
     exit;
 }
@@ -71,6 +79,7 @@ try {
 } catch (PDOException $e) {
     // return JSON error response if DB fails
     http_response_code(500);
+    log_debug('Insert monitoring_data failed: ' . $e->getMessage());
     echo json_encode(['error' => 'Database insert failed: ' . $e->getMessage()]);
     exit;
 }
